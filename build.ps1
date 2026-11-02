@@ -118,3 +118,4 @@ if ($parts -notcontains $bin) {
 
 Write-Host "Installed wifi-login, lan-login, and wlantron into $bin"
 Write-Host "Next: wifi-login --configure"
+Write-Host "Later: wifi-login --update"

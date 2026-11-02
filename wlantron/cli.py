@@ -227,6 +227,7 @@ def build_parser(invoked: str) -> argparse.ArgumentParser:
         description="HHO_WiFi and school LAN Fortinet captive-portal login for Linux and Windows.",
     )
     ap.add_argument("--version", action="version", version=f"wlantron {__version__}")
+    ap.add_argument("--update", action="store_true", help="Update this install from GitHub main. Passwords are kept.")
     ap.add_argument("--status", action="store_true", help="Show live portal / connectivity status per interface")
     ap.add_argument("--configure", "--save", action="store_true", help="Save or update portal username and password")
     ap.add_argument("--clear-saved", action="store_true", help="Delete saved portal credentials")
@@ -244,7 +245,18 @@ def build_parser(invoked: str) -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     enable_color()
     invoked = invocation_name()
+    if argv is None:
+        argv = sys.argv[1:]
+    from .update import prepare_argv
+
+    argv = prepare_argv(list(argv))
     args = build_parser(invoked).parse_args(argv)
+
+    if args.update:
+        from .update import update_install
+
+        return update_install()
+
     store = CredStore()
 
     if args.clear_saved:
@@ -298,14 +310,26 @@ def _configure(store: CredStore) -> int:
     existing = store.load()
     default_user = existing[0] if existing else ""
     prompt_u = f"Username [{default_user}]: " if default_user else "Username: "
-    username = input(prompt_u).strip() or default_user
+    try:
+        username = input(prompt_u).strip() or default_user
+    except EOFError:
+        err("No terminal input. Open cmd or PowerShell and run wifi-login --configure.")
+        return 1
     if not username:
         err("Username cannot be empty.")
         return 1
-    password = getpass.getpass("Password: ")
+    try:
+        password = getpass.getpass("Password: ")
+    except EOFError:
+        err("No terminal input. Open cmd or PowerShell and run wifi-login --configure.")
+        return 1
     if not password:
         err("Password cannot be empty.")
         return 1
-    store.save(username, password)
-    ok(f"Credentials saved to {store.path}. Run `wifi-login` or `lan-login` to authenticate.")
+    try:
+        saved = store.save(username, password)
+    except OSError as exc:
+        err(f"Could not save credentials: {exc}")
+        return 1
+    ok(f"Credentials saved to {saved}. Run `wifi-login` or `lan-login` to authenticate.")
     return 0

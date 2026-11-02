@@ -87,3 +87,4 @@ case ":$PATH:" in
     *) printf 'wlantron: %s is not on PATH. Add it to your shell profile.\n' "$PREFIX/bin" >&2 ;;
 esac
 printf 'Next: wifi-login --configure\n'
+printf 'Later: wifi-login --update\n'

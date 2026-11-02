@@ -40,12 +40,21 @@ Both commands need Python 3.10 or newer. They byte-compile the package and insta
 | From a checkout | `./build.sh` | `powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1` |
 | Prefix override | `WLANTRON_PREFIX` | `WLANTRON_PREFIX` |
 
-A checkout install points the commands at that tree. The curl command copies the package under the prefix. Run the same command again to update.
+A checkout install points the commands at that tree. The curl command copies the package under the prefix.
+
+Update an install you already have (a git checkout or a curl copy). Passwords are left where they are:
+
+```bash
+wifi-login --update
+```
+
+`wifi-login update` is the same command. On a git checkout this is `git pull --ff-only`. On a curl install it downloads `main` and replaces the package files.
 
 ## Use
 
 ```bash
 wifi-login --configure     # save username and password
+wifi-login --update        # pull the latest main from GitHub
 wifi-login                 # log in connected Wi-Fi and LAN
 lan-login                  # wired only
 wifi-login --status
@@ -63,6 +72,8 @@ Credentials are plaintext:
 |---|---|
 | Linux | `~/.config/hho-wifi/credentials.json` (mode `0600`) |
 | Windows | `%APPDATA%\hho-wifi\credentials.json` |
+
+On Windows, Enter at the save question stores the password. `n` skips it. If Roaming AppData cannot be written, the file is tried under `%LOCALAPPDATA%\hho-wifi` and then `%USERPROFILE%\.config\hho-wifi`. A password already in one of those folders is still read.
 
 `wifi-login --clear-saved` deletes the file. Nothing in this repo stores a password.
 

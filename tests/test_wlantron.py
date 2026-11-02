@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import argparse
+import io
 import os
 import socket
 import stat
+import tarfile
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -17,7 +20,8 @@ from wlantron.cli import (
     session_file,
 )
 from wlantron.const import DEFAULT_IFACE
-from wlantron.creds import CredStore
+from wlantron.creds import CredStore, config_dirs, wants_save
+from wlantron.update import apply_tarball, package_rel, prepare_argv
 from wlantron.model import Iface, ipv4_list
 from wlantron.portal import (
     FortiFormParser,
@@ -206,6 +210,77 @@ class CredTests(unittest.TestCase):
             self.assertEqual(store.load(), ("cadet", "secret-test"))
             self.assertTrue(store.clear())
             self.assertIsNone(store.load())
+
+    def test_empty_answer_saves_and_no_does_not(self):
+        self.assertTrue(wants_save(""))
+        self.assertTrue(wants_save("Y"))
+        self.assertFalse(wants_save("n"))
+
+    def test_windows_dirs_and_legacy_load(self):
+        home = Path("C:/Users/cadet")
+        dirs = config_dirs(
+            "win32",
+            {
+                "APPDATA": str(home / "AppData" / "Roaming"),
+                "LOCALAPPDATA": str(home / "AppData" / "Local"),
+            },
+            home,
+        )
+        self.assertEqual(dirs[0], home / "AppData" / "Roaming" / "hho-wifi")
+        self.assertIn(home / ".config" / "hho-wifi", dirs)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            roaming = root / "roaming"
+            legacy = root / "legacy"
+            legacy.mkdir()
+            (legacy / "credentials.json").write_text(
+                '{"username": "cadet", "password": "secret-test"}\n',
+                encoding="utf-8",
+            )
+            store = CredStore(directories=[roaming, legacy])
+            self.assertEqual(store.load(), ("cadet", "secret-test"))
+            store.save("cadet", "secret-test")
+            self.assertTrue((roaming / "credentials.json").is_file())
+            self.assertIn("secret-test", (legacy / "credentials.json").read_text(encoding="utf-8"))
+
+
+class UpdateTests(unittest.TestCase):
+    def test_update_word_becomes_flag(self):
+        self.assertEqual(prepare_argv(["update"]), ["--update"])
+        self.assertEqual(prepare_argv(["--status"]), ["--status"])
+
+    def test_rejects_path_escape(self):
+        self.assertIsNone(package_rel("wlantron-main/../../etc/passwd"))
+        self.assertIsNone(package_rel("/etc/passwd"))
+        self.assertEqual(package_rel("wlantron-main/wlantron/cli.py"), Path("wlantron/cli.py"))
+
+    def test_apply_tarball_replaces_package_only(self):
+        blob = io.BytesIO()
+        with tarfile.open(fileobj=blob, mode="w:gz") as tar:
+            payload = b"__version__ = '9.9.9'\n"
+            info = tarfile.TarInfo("wlantron-main/wlantron/__init__.py")
+            info.size = len(payload)
+            tar.addfile(info, io.BytesIO(payload))
+            main = b"print('new')\n"
+            main_info = tarfile.TarInfo("wlantron-main/wlantron/__main__.py")
+            main_info.size = len(main)
+            tar.addfile(main_info, io.BytesIO(main))
+            sneak = b"nope\n"
+            bad = tarfile.TarInfo("wlantron-main/../../outside.txt")
+            bad.size = len(sneak)
+            tar.addfile(bad, io.BytesIO(sneak))
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            package = root / "wlantron"
+            package.mkdir()
+            (package / "__init__.py").write_text("__version__ = 'old'\n", encoding="utf-8")
+            (package / "__main__.py").write_text("print('old')\n", encoding="utf-8")
+            count = apply_tarball(root, blob.getvalue())
+            self.assertEqual(count, 2)
+            self.assertIn("9.9.9", (package / "__init__.py").read_text(encoding="utf-8"))
+            self.assertIn("new", (package / "__main__.py").read_text(encoding="utf-8"))
+            self.assertFalse((root / "outside.txt").exists())
 
 
 class WindowsShapeTests(unittest.TestCase):
