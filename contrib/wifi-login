@@ -1,0 +1,7 @@
+#!/bin/sh
+# NixOS activation installs this file as ~/.local/bin/wifi-login.
+# lan-login and wlantron are symlinks. basename selects the mode.
+# The program itself stays in ~/Documents/wlantron.
+as=$(basename "$0")
+export WLANTRON_AS="$as"
+exec python3 "$HOME/Documents/wlantron/wlantron/__main__.py" "$@"

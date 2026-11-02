@@ -1,0 +1,20 @@
+[project]
+name = "wlantron"
+version = "0.1.0"
+description = "FortiGate captive-portal login for school Wi-Fi and wired LAN"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Arcioth" }]
+
+[project.scripts]
+wlantron = "wlantron.cli:main"
+wifi-login = "wlantron.cli:main"
+lan-login = "wlantron.cli:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["wlantron*"]
