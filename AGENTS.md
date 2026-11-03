@@ -9,6 +9,7 @@ School FortiGate captive-portal login. Linux and Windows. The user already runs 
 - `lan-login` is wired-only. `wifi-login` and `wlantron` are the smart default (every connected adapter). The string `wlantron` contains `lan` and must not be treated as the wired alias. The check is an exact name match in `cli.py`.
 - Credentials stay in `~/.config/hho-wifi/credentials.json` on Linux so the old file still works. Windows prefers `%APPDATA%\hho-wifi\credentials.json` and also reads Local AppData and `%USERPROFILE%\.config\hho-wifi`. Do not run `icacls` on that file. Never commit it. Never log the password or the POST body.
 - `wifi-login --update` updates the running install from GitHub `main`. A dirty git checkout is refused. The password file is outside the package and must not be overwritten by the update.
+- Android is `android/`. Do not add a second HTTP stack. Portal form parsing stays in `Portal.kt` with no Android imports so `gradle test` can run it. Wi-Fi binding stays in `WifiHttp.kt` via `Network.openConnection`. Do not request location just to read the SSID. Do not commit `local.properties` or the APK.
 - Stdlib only. Python 3.10+.
 - The curl build is `build.sh` (Linux) and `build.ps1` (Windows). A checkout install points launchers at the tree. A piped install copies into the prefix.
 - Tests: `python3 -m unittest discover -s tests -v` from the repo root. They must not touch the real credential file and must not hit the network.

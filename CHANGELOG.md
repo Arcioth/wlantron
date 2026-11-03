@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0 — 2026-11-02
+
+- Android sideload app in `android/`. It signs in over the connected Wi-Fi with `Network.openConnection`, so mobile data or a VPN can stay the default route. Join `HHO_WiFi` in system settings first. The password is stored in the app's private preferences. Build with `cd android && nix-shell --run "gradle assembleDebug --no-daemon"`.
+
 ## 0.1.1 — 2026-11-02
 
 - Windows saves the password when you press Enter. The old question defaulted to no, and the Enter from the password prompt answered it before you could type.

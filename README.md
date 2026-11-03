@@ -75,6 +75,27 @@ Credentials are plaintext:
 
 On Windows, Enter at the save question stores the password. `n` skips it. If Roaming AppData cannot be written, the file is tried under `%LOCALAPPDATA%\hho-wifi` and then `%USERPROFILE%\.config\hho-wifi`. A password already in one of those folders is still read.
 
+## Android
+
+Sideload APK. Join `HHO_WiFi` in the phone's Wi-Fi settings, then open wlantron and log in. The app sends the portal traffic through Wi-Fi while mobile data or a VPN stays the default route.
+
+Build on this NixOS machine:
+
+```bash
+cd android
+nix-shell --run "gradle assembleDebug --no-daemon"
+```
+
+APK: `android/app/build/outputs/apk/debug/app-debug.apk`
+
+Install with the phone plugged in and USB debugging on:
+
+```bash
+adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+Or copy the APK onto the phone and allow install from that file manager. The password stays in the app's private storage. `Clear saved` deletes it.
+
 `wifi-login --clear-saved` deletes the file. Nothing in this repo stores a password.
 
 On Windows, joining Wi-Fi or resetting Ethernet can ask for an administrator. A login on an adapter that already has an address does not.

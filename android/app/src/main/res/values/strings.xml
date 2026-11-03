@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">wlantron</string>
+    <string name="subtitle">School Wi-Fi sign-in. Join HHO_WiFi first. Traffic stays on Wi-Fi.</string>
+    <string name="username">Username</string>
+    <string name="password">Password</string>
+    <string name="save_login">Save on this phone</string>
+    <string name="log_in">Log in</string>
+    <string name="check">Check</string>
+    <string name="clear_saved">Clear saved</string>
+</resources>

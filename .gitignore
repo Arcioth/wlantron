@@ -5,3 +5,9 @@ __pycache__/
 .venv/
 credentials.json
 .credentials
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.kotlin/
+*.apk
