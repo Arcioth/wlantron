@@ -34,7 +34,7 @@ Git checkout: `git pull --ff-only origin main`. Curl copy: replace the package f
 - Saved passwords stay in `~/.config/hho-wifi/credentials.json`. Do not copy that file into git.
 - Checked on this machine: unit tests, `--help`, and a local `./build.sh`. `wifi-login --status --iface wlp4s0` reported `HHO_WiFi` already authenticated. No portal POST. `eno1` was down, so `lan-login` was not run. Windows `build.ps1` was not run on Windows.
 - 0.1.1: Windows credential save no longer uses `icacls`, and Enter at the save question stores the password. `wifi-login --update` pulls `main`. The Windows save path was not re-run on a Windows PC.
-- 0.2.0: Android app in `android/`. Built 2026-11-03: `gradle test assembleDebug` succeeded. APK is `android/app/build/outputs/apk/debug/app-debug.apk` (about 3.4 MB, not in git). No phone was attached, so it was not installed. Install later with `adb install -r` that file. The phone must already be joined to `HHO_WiFi`.
+- 0.2.0: Android app in `android/`. Built 2026-11-03: `gradle test assembleDebug` succeeded. Debug demo release: https://github.com/Arcioth/wlantron/releases/tag/v0.2.0-debug (`wlantron-0.2.0-debug.apk`, prerelease, tag on `79b18ae`). No phone was attached. The phone must already be joined to `HHO_WiFi`.
 
 ## Next
 
