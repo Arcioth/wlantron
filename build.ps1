@@ -1,5 +1,5 @@
 # Install wlantron on Windows. Re-run to update.
-#   curl.exe -fsSL https://raw.githubusercontent.com/Arcioth/wlantron/main/build.ps1 | powershell -NoProfile -ExecutionPolicy Bypass -Command -
+#   curl.exe -fsSL https://raw.githubusercontent.com/Arcioth/wlantron/main/install.cmd | cmd
 # WLANTRON_PREFIX  default %LOCALAPPDATA%\wlantron
 # WLANTRON_REF     default main
 # ASCII only, so Windows PowerShell 5.1 does not misread the file.

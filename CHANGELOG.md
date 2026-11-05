@@ -3,7 +3,7 @@
 ## 0.2.1 — 2026-11-03
 
 - Windows `build.ps1` no longer calls `Remove-Item`. A short user path such as `YT28B4~1` contains `~`, which PowerShell treats as a wildcard, so cleanup aborted the install. Deleting now goes through .NET. The script is shorter. The `.cmd` launchers are still UTF-8 with a BOM. Not retested on Windows.
-- Windows install is one pipe: `curl.exe -fsSL .../build.ps1 | powershell -NoProfile -ExecutionPolicy Bypass -Command -`.
+- Windows install is one curl pipe. `install.cmd` is what starts PowerShell: `curl.exe -fsSL .../install.cmd | cmd`.
 
 ## 0.2.0 — 2026-11-02
 

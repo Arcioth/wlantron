@@ -23,8 +23,10 @@ curl -fsSL https://raw.githubusercontent.com/Arcioth/wlantron/main/build.sh | sh
 Windows (cmd or PowerShell):
 
 ```bat
-curl.exe -fsSL https://raw.githubusercontent.com/Arcioth/wlantron/main/build.ps1 | powershell -NoProfile -ExecutionPolicy Bypass -Command -
+curl.exe -fsSL https://raw.githubusercontent.com/Arcioth/wlantron/main/install.cmd | cmd
 ```
+
+That file starts PowerShell. Curl itself only downloads.
 
 Both commands need Python 3.10 or newer. They byte-compile the package and install `wifi-login`, `lan-login`, and `wlantron`.
 
