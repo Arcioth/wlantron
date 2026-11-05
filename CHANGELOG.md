@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.3 — 2026-11-03
+
+- Android no longer treats the Firefox, Apple, or Google captive-portal URLs as proof of internet. Those names are often allowed before login, so 0.2.2 could say "signed in" while normal sites still failed. A sign-in now counts only if `example.com` loads from the Wi-Fi address. Android is then asked to recheck the network.
+
 ## 0.2.2 — 2026-11-03
 
 - Android login no longer waits on `HttpURLConnection` to `detectportal.firefox.com`. That call ignored its timeout and did its DNS lookup off the Wi-Fi network, so Log in sat on "Looking for Wi-Fi" and Check reported the Firefox probe. Requests are sockets bound to the Wi-Fi network, and the Wi-Fi gateway is tried first.

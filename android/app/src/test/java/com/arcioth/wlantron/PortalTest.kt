@@ -7,6 +7,39 @@ import org.junit.Test
 
 class PortalTest {
     @Test
+    fun allowlistedProbeIsNotInternet() {
+        val http = HttpCall { _, url, _, _, _ ->
+            when {
+                "example.com" in url -> HttpResult(
+                    302,
+                    mapOf("location" to "http://10.1.1.1/fgtauth?abc"),
+                    emptyList(),
+                    ByteArray(0),
+                )
+                "generate_204" in url -> HttpResult(204, emptyMap(), emptyList(), ByteArray(0))
+                else -> HttpResult(200, emptyMap(), emptyList(), "support.mozilla.org/kb/captive-portal".toByteArray())
+            }
+        }
+        val state = Portal.probe(http)
+        assertTrue(state is Probe.Portal)
+        assertEquals("http://10.1.1.1/fgtauth?abc", (state as Probe.Portal).url)
+    }
+
+    @Test
+    fun exampleDomainMeansOnline() {
+        val http = HttpCall { _, url, _, _, _ ->
+            if ("example.com" in url && url.startsWith("https")) {
+                HttpResult(200, emptyMap(), emptyList(), "<html><body>Example Domain</body></html>".toByteArray())
+            } else if ("example.com" in url) {
+                HttpResult(301, mapOf("location" to "https://example.com/"), emptyList(), ByteArray(0))
+            } else {
+                HttpResult(204, emptyMap(), emptyList(), ByteArray(0))
+            }
+        }
+        assertTrue(Portal.probe(http) is Probe.Online)
+    }
+
+    @Test
     fun gatewayRedirectIsThePortal() {
         val http = HttpCall { _, url, _, _, _ ->
             if ("10.3.248.1" in url) {

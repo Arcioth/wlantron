@@ -33,7 +33,11 @@ import javax.net.ssl.X509TrustManager
  * FortiGate answers the portal with a certificate the phone does not trust.
  * The desktop program turns verification off for the same reason.
  */
-class WifiHttp(private val network: Network) : HttpCall {
+class WifiHttp(
+    private val network: Network,
+    private val wifiIps: Set<String> = emptySet(),
+) : HttpCall {
+    @Volatile var sourceAddress: String? = null
     override fun exchange(
         method: String,
         url: String,
@@ -56,6 +60,11 @@ class WifiHttp(private val network: Network) : HttpCall {
             network.bindSocket(plain)
             plain.soTimeout = timeoutMs
             plain.connect(InetSocketAddress(address, port), timeoutMs)
+            val localIp = (plain.localAddress as? Inet4Address)?.hostAddress
+            if (!localIp.isNullOrEmpty()) sourceAddress = localIp
+            if (wifiIps.isNotEmpty() && !localIp.isNullOrEmpty() && localIp !in wifiIps) {
+                throw java.io.IOException("Left Wi-Fi via $localIp")
+            }
             if (https) {
                 val ssl = trustAll.socketFactory.createSocket(plain, host, port, true) as SSLSocket
                 ssl.soTimeout = timeoutMs
@@ -145,6 +154,15 @@ class WifiHttp(private val network: Network) : HttpCall {
             }
             links.dhcpServerAddress?.hostAddress?.let { if (IPV4.matches(it)) ips += it }
             return ips.map { "http://$it/" }
+        }
+
+        fun addresses(context: Context, network: Network): Set<String> {
+            val manager = context.getSystemService(ConnectivityManager::class.java) ?: return emptySet()
+            val links = manager.getLinkProperties(network) ?: return emptySet()
+            return links.linkAddresses.mapNotNull { info ->
+                val addr = info.address
+                if (addr is Inet4Address && !addr.isLoopbackAddress) addr.hostAddress else null
+            }.toSet()
         }
     }
 }

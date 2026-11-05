@@ -3,16 +3,20 @@ package com.arcioth.wlantron
 import java.net.URI
 import java.net.URLEncoder
 
+private val IPV4 = Regex("""\d{1,3}(\.\d{1,3}){3}""")
+
 /**
  * FortiGate captive-portal steps shared with the desktop program.
  * No Android types in this file, so the JVM tests can run it.
  */
 object Portal {
-    private val probes = listOf(
-        ProbeSpec("http://detectportal.firefox.com/canonical.html", 200, exact = null, contains = "support.mozilla.org/kb/captive-portal"),
-        ProbeSpec("http://detectportal.firefox.com/success.txt", 200, exact = "success", contains = null),
-        ProbeSpec("http://captive.apple.com/hotspot-detect.html", 200, exact = null, contains = "Success"),
-        ProbeSpec("http://connectivitycheck.gstatic.com/generate_204", 204, exact = null, contains = null),
+    private const val INTERNET_URL = "http://example.com/"
+
+    /** These names are often allowed through before anyone has logged in. A 204 from one of them is not internet. */
+    private val portalFinders = listOf(
+        "http://detectportal.firefox.com/canonical.html",
+        "http://captive.apple.com/hotspot-detect.html",
+        "http://connectivitycheck.gstatic.com/generate_204",
     )
 
     fun signIn(
@@ -46,40 +50,63 @@ object Portal {
             val found = tryHit(http, url, errors) ?: continue
             return found
         }
+        proveInternet(http, errors)?.let { return it }
         val nonce = System.currentTimeMillis().toString()
-        for (spec in probes) {
-            val sep = if ('?' in spec.url) "&" else "?"
-            val url = "${spec.url}${sep}nocache=$nonce"
-            val result = try {
-                http.exchange("GET", url, emptyMap(), null, 4000)
-            } catch (exc: Exception) {
-                errors += "${spec.url}: ${exc.message ?: exc.javaClass.simpleName}"
-                continue
-            }
-            if (result.status == spec.expect) {
-                val text = result.body.toString(Charsets.UTF_8).trim()
-                val bytes = result.body.toString(Charsets.UTF_8)
-                val matched = when {
-                    spec.exact != null -> text == spec.exact
-                    spec.contains != null -> spec.contains in bytes
-                    else -> true
-                }
-                if (matched) return Probe.Online
-            }
-            classifyHit(url, result)?.let { return it }
+        for (base in portalFinders) {
+            val found = tryHit(http, "$base?nocache=$nonce", errors) ?: continue
+            return found
         }
         val detail = errors.take(2).joinToString("; ").ifBlank { "all probes timed out" }
         return Probe.Down(detail)
     }
 
-    private fun tryHit(http: HttpCall, url: String, errors: MutableList<String>): Probe? {
-        val result = try {
-            http.exchange("GET", url, emptyMap(), null, 3000)
+    /** A normal site, not a captive-portal URL the firewall may allow before login. */
+    private fun proveInternet(http: HttpCall, errors: MutableList<String>): Probe? {
+        var url = INTERNET_URL
+        var result = fetch(http, url, errors) ?: return null
+        val next = extractRedirect(url, result.status, result.headers, result.body)
+        if (next != null) {
+            if (isPortalRedirect(url, next)) return Probe.Portal(next, null)
+            url = next
+            result = fetch(http, url, errors) ?: return null
+            val again = extractRedirect(url, result.status, result.headers, result.body)
+            if (again != null && isPortalRedirect(url, again)) return Probe.Portal(again, null)
+        }
+        classifyHit(url, result)?.let { return it }
+        val text = result.body.toString(Charsets.UTF_8)
+        if (result.status == 200 && "Example Domain" in text && "<form" !in text.lowercase()) {
+            return Probe.Online
+        }
+        return null
+    }
+
+    private fun fetch(http: HttpCall, url: String, errors: MutableList<String>): HttpResult? {
+        return try {
+            http.exchange("GET", url, emptyMap(), null, 4000)
         } catch (exc: Exception) {
             errors += "${url.substringBefore("?nocache")}: ${exc.message ?: exc.javaClass.simpleName}"
-            return null
+            null
         }
+    }
+
+    private fun tryHit(http: HttpCall, url: String, errors: MutableList<String>): Probe? {
+        val result = fetch(http, url, errors) ?: return null
         return classifyHit(url, result)
+    }
+
+    /** http://example.com to https://example.com is not a captive portal. A private-IP or fgtauth redirect is. */
+    private fun isPortalRedirect(from: String, to: String): Boolean {
+        val lower = to.lowercase()
+        if ("fgtauth" in lower) return true
+        val toHost = runCatching { URI(to).host }.getOrNull() ?: return true
+        val fromHost = runCatching { URI(from).host }.getOrNull()
+        if (fromHost != null && fromHost.equals(toHost, ignoreCase = true)) return false
+        if (IPV4.matches(toHost)) {
+            val a = toHost.split('.').map { it.toInt() }
+            val priv = a[0] == 10 || (a[0] == 192 && a[1] == 168) || (a[0] == 172 && a[1] in 16..31)
+            if (priv) return true
+        }
+        return false
     }
 
     private fun classifyHit(url: String, result: HttpResult): Probe? {
@@ -299,13 +326,6 @@ data class HttpResult(
     val headers: Map<String, String>,
     val cookies: List<String>,
     val body: ByteArray,
-)
-
-data class ProbeSpec(
-    val url: String,
-    val expect: Int,
-    val exact: String?,
-    val contains: String?,
 )
 
 sealed class Probe {

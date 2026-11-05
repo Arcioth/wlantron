@@ -1,5 +1,6 @@
 package com.arcioth.wlantron
 
+import android.net.ConnectivityManager
 import android.os.Bundle
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
@@ -59,14 +60,16 @@ class MainActivity : AppCompatActivity() {
                 return@execute
             }
             val hints = WifiHttp.hints(this, network)
+            val cm = getSystemService(ConnectivityManager::class.java)
+            cm.bindProcessToNetwork(network)
             ui { log(if (hints.isEmpty()) "Wi-Fi is up." else "Wi-Fi is up. Gateway ${hints.first()}.") }
-            val http = WifiHttp(network)
+            val http = WifiHttp(network, WifiHttp.addresses(this, network))
             try {
                 if (!signIn) {
                     val state = Portal.probe(http, hints)
                     ui {
                         when (state) {
-                            is Probe.Online -> log("Signed in. This Wi-Fi has internet.")
+                            is Probe.Online -> noteOnline(cm, network, "This Wi-Fi can open a normal site.")
                             is Probe.Portal -> log("Captive portal is up. Tap Log in.")
                             is Probe.Down -> log(state.detail)
                         }
@@ -77,8 +80,8 @@ class MainActivity : AppCompatActivity() {
                 val outcome = Portal.signIn(http, username, password, ::uiLog, hints)
                 ui {
                     when (outcome) {
-                        Outcome.AlreadyOnline -> log("Already signed in.")
-                        Outcome.SignedIn -> log("Signed in.")
+                        Outcome.AlreadyOnline -> noteOnline(cm, network, "Already signed in on Wi-Fi.")
+                        Outcome.SignedIn -> noteOnline(cm, network, "Signed in on Wi-Fi.")
                         is Outcome.Failed -> log(outcome.message)
                     }
                     setBusy(false)
@@ -88,8 +91,15 @@ class MainActivity : AppCompatActivity() {
                     log(exc.message ?: "Login failed.")
                     setBusy(false)
                 }
+            } finally {
+                cm.bindProcessToNetwork(null)
             }
         }
+    }
+
+    private fun noteOnline(cm: ConnectivityManager, network: android.net.Network, message: String) {
+        cm.reportNetworkConnectivity(network, true)
+        log("$message Android is rechecking Wi-Fi. If a site still fails, turn mobile data off and try it again.")
     }
 
     private fun uiLog(line: String) {
