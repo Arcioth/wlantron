@@ -58,10 +58,12 @@ class MainActivity : AppCompatActivity() {
                 }
                 return@execute
             }
+            val hints = WifiHttp.hints(this, network)
+            ui { log(if (hints.isEmpty()) "Wi-Fi is up." else "Wi-Fi is up. Gateway ${hints.first()}.") }
             val http = WifiHttp(network)
             try {
                 if (!signIn) {
-                    val state = Portal.probe(http)
+                    val state = Portal.probe(http, hints)
                     ui {
                         when (state) {
                             is Probe.Online -> log("Signed in. This Wi-Fi has internet.")
@@ -72,7 +74,7 @@ class MainActivity : AppCompatActivity() {
                     }
                     return@execute
                 }
-                val outcome = Portal.signIn(http, username, password, ::uiLog)
+                val outcome = Portal.signIn(http, username, password, ::uiLog, hints)
                 ui {
                     when (outcome) {
                         Outcome.AlreadyOnline -> log("Already signed in.")

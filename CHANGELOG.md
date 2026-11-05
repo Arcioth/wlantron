@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.2 — 2026-11-03
+
+- Android login no longer waits on `HttpURLConnection` to `detectportal.firefox.com`. That call ignored its timeout and did its DNS lookup off the Wi-Fi network, so Log in sat on "Looking for Wi-Fi" and Check reported the Firefox probe. Requests are sockets bound to the Wi-Fi network, and the Wi-Fi gateway is tried first.
+
 ## 0.2.1 — 2026-11-03
 
 - Windows `build.ps1` no longer calls `Remove-Item`. A short user path such as `YT28B4~1` contains `~`, which PowerShell treats as a wildcard, so cleanup aborted the install. Deleting now goes through .NET. The script is shorter. The `.cmd` launchers are still UTF-8 with a BOM. Not retested on Windows.

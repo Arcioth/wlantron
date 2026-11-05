@@ -7,6 +7,20 @@ import org.junit.Test
 
 class PortalTest {
     @Test
+    fun gatewayRedirectIsThePortal() {
+        val http = HttpCall { _, url, _, _, _ ->
+            if ("10.3.248.1" in url) {
+                HttpResult(302, mapOf("location" to "http://10.3.248.1:1000/fgtauth?abc"), emptyList(), ByteArray(0))
+            } else {
+                throw java.io.IOException("dns failed")
+            }
+        }
+        val state = Portal.probe(http, listOf("http://10.3.248.1/"))
+        assertTrue(state is Probe.Portal)
+        assertEquals("http://10.3.248.1:1000/fgtauth?abc", (state as Probe.Portal).url)
+    }
+
+    @Test
     fun redirectAndMagicToken() {
         val loc = Portal.extractRedirect(
             "http://detectportal.firefox.com/canonical.html",

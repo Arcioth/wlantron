@@ -15,8 +15,15 @@ object Portal {
         ProbeSpec("http://connectivitycheck.gstatic.com/generate_204", 204, exact = null, contains = null),
     )
 
-    fun signIn(http: HttpCall, username: String, password: String, log: (String) -> Unit): Outcome {
-        val first = probe(http)
+    fun signIn(
+        http: HttpCall,
+        username: String,
+        password: String,
+        log: (String) -> Unit,
+        hints: List<String> = emptyList(),
+    ): Outcome {
+        log("Checking the portal.")
+        val first = probe(http, hints)
         when (first) {
             is Probe.Online -> return Outcome.AlreadyOnline
             is Probe.Down -> return Outcome.Failed(first.detail)
@@ -27,14 +34,18 @@ object Portal {
             }
         }
         repeat(5) {
-            if (probe(http) is Probe.Online) return Outcome.SignedIn
+            if (probe(http, hints) is Probe.Online) return Outcome.SignedIn
             Thread.sleep(800)
         }
         return Outcome.Failed("The portal did not open internet access. Try again.")
     }
 
-    fun probe(http: HttpCall): Probe {
+    fun probe(http: HttpCall, hints: List<String> = emptyList()): Probe {
         val errors = mutableListOf<String>()
+        for (url in hints) {
+            val found = tryHit(http, url, errors) ?: continue
+            return found
+        }
         val nonce = System.currentTimeMillis().toString()
         for (spec in probes) {
             val sep = if ('?' in spec.url) "&" else "?"
@@ -55,15 +66,31 @@ object Portal {
                 }
                 if (matched) return Probe.Online
             }
-            val redir = extractRedirect(url, result.status, result.headers, result.body)
-            if (redir != null) return Probe.Portal(redir, null)
-            val lower = result.body.toString(Charsets.UTF_8).lowercase()
-            if ("<form" in lower && ("magic" in lower || "fgtauth" in lower)) {
-                return Probe.Portal(url, result.body)
-            }
+            classifyHit(url, result)?.let { return it }
         }
         val detail = errors.take(2).joinToString("; ").ifBlank { "all probes timed out" }
         return Probe.Down(detail)
+    }
+
+    private fun tryHit(http: HttpCall, url: String, errors: MutableList<String>): Probe? {
+        val result = try {
+            http.exchange("GET", url, emptyMap(), null, 3000)
+        } catch (exc: Exception) {
+            errors += "${url.substringBefore("?nocache")}: ${exc.message ?: exc.javaClass.simpleName}"
+            return null
+        }
+        return classifyHit(url, result)
+    }
+
+    private fun classifyHit(url: String, result: HttpResult): Probe? {
+        val redir = extractRedirect(url, result.status, result.headers, result.body)
+        if (redir != null) return Probe.Portal(redir, null)
+        val text = result.body.toString(Charsets.UTF_8)
+        val lower = text.lowercase()
+        if ("<form" in lower && ("magic" in lower || "fgtauth" in lower)) {
+            return Probe.Portal(url, result.body)
+        }
+        return null
     }
 
     internal fun submit(
