@@ -17,7 +17,7 @@ curl -fsSL https://raw.githubusercontent.com/Arcioth/wlantron/main/build.sh | sh
 Windows curl build:
 
 ```bat
-curl -fsSL -o %TEMP%\wlantron-build.ps1 https://raw.githubusercontent.com/Arcioth/wlantron/main/build.ps1 && powershell -NoProfile -ExecutionPolicy Bypass -File %TEMP%\wlantron-build.ps1
+curl.exe -fsSL https://raw.githubusercontent.com/Arcioth/wlantron/main/build.ps1 | powershell -NoProfile -ExecutionPolicy Bypass -Command -
 ```
 
 A local `./build.sh` points `~/.local/bin` at this tree. The piped curl copies a snapshot under the prefix.

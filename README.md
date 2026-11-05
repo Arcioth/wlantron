@@ -20,16 +20,10 @@ Linux:
 curl -fsSL https://raw.githubusercontent.com/Arcioth/wlantron/main/build.sh | sh
 ```
 
-Windows (cmd):
+Windows (cmd or PowerShell):
 
 ```bat
-curl -fsSL -o %TEMP%\wlantron-build.ps1 https://raw.githubusercontent.com/Arcioth/wlantron/main/build.ps1 && powershell -NoProfile -ExecutionPolicy Bypass -File %TEMP%\wlantron-build.ps1
-```
-
-Windows (PowerShell):
-
-```powershell
-curl.exe -fsSL -o $env:TEMP\wlantron-build.ps1 https://raw.githubusercontent.com/Arcioth/wlantron/main/build.ps1; powershell -NoProfile -ExecutionPolicy Bypass -File $env:TEMP\wlantron-build.ps1
+curl.exe -fsSL https://raw.githubusercontent.com/Arcioth/wlantron/main/build.ps1 | powershell -NoProfile -ExecutionPolicy Bypass -Command -
 ```
 
 Both commands need Python 3.10 or newer. They byte-compile the package and install `wifi-login`, `lan-login`, and `wlantron`.
