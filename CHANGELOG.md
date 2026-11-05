@@ -2,7 +2,7 @@
 
 ## 0.2.1 — 2026-11-03
 
-- Windows `build.ps1` no longer calls `Remove-Item` on the temp directory. A user name such as `YİĞİT` is stored as the short path `YT28B4~1`, and PowerShell treats that `~` as a wildcard, so cleanup aborted the install. Temp files are removed with .NET, and the `.cmd` launchers are written UTF-8 with a BOM so the path survives `cmd.exe`.
+- Windows `build.ps1` no longer calls `Remove-Item`. A short user path such as `YT28B4~1` contains `~`, which PowerShell treats as a wildcard, so cleanup aborted the install. Deleting now goes through .NET. The script is shorter. The `.cmd` launchers are still UTF-8 with a BOM. Not retested on Windows.
 
 ## 0.2.0 — 2026-11-02
 

@@ -35,7 +35,7 @@ Git checkout: `git pull --ff-only origin main`. Curl copy: replace the package f
 - Checked on this machine: unit tests, `--help`, and a local `./build.sh`. `wifi-login --status --iface wlp4s0` reported `HHO_WiFi` already authenticated. No portal POST. `eno1` was down, so `lan-login` was not run. Windows `build.ps1` was not run on Windows.
 - 0.1.1: Windows credential save no longer uses `icacls`, and Enter at the save question stores the password. `wifi-login --update` pulls `main`. The Windows save path was not re-run on a Windows PC.
 - 0.2.0: Android app in `android/`. Built 2026-11-03: `gradle test assembleDebug` succeeded. Debug demo release: https://github.com/Arcioth/wlantron/releases/tag/v0.2.0-debug (`wlantron-0.2.0-debug.apk`, prerelease, tag on `79b18ae`). No phone was attached. The phone must already be joined to `HHO_WiFi`.
-- 0.2.1: Windows curl install failed for user `YİĞİT` because `Remove-Item` mishandles the 8.3 path `YT28B4~1`. `build.ps1` now deletes with .NET and writes UTF-8 BOM `.cmd` files. Re-run the curl command. Not retested on that PC.
+- 0.2.1: Windows curl install failed for user `YİĞİT` because `Remove-Item` mishandles the 8.3 path `YT28B4~1`. `build.ps1` deletes with .NET instead, and the long Win32 helper was removed so the script stays short. Re-run the curl command. Not retested on Windows.
 
 ## Next
 
