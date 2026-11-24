@@ -28,7 +28,7 @@ curl.exe -fsSL https://raw.githubusercontent.com/Arcioth/wlantron/main/install.c
 
 That file starts PowerShell. Curl itself only downloads.
 
-Both commands need Python 3.10 or newer. They byte-compile the package and install `wifi-login`, `lan-login`, and `wlantron`.
+Both commands install Python 3.10+ automatically if it is missing, then byte-compile the package and install `wifi-login`, `lan-login`, and `wlantron`.
 
 | | Linux | Windows |
 |---|---|---|

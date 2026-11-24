@@ -23,9 +23,50 @@ need() {
     command -v "$1" >/dev/null 2>&1 || die "missing '$1'"
 }
 
-need python3
-python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)' \
-    || die "Python 3.10 or newer is required"
+has_python() {
+    command -v python3 >/dev/null 2>&1 \
+        && python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)' 2>/dev/null
+}
+
+run_root() {
+    if [ "$(id -u)" -eq 0 ]; then
+        "$@"
+    elif command -v sudo >/dev/null 2>&1; then
+        sudo "$@"
+    elif command -v doas >/dev/null 2>&1; then
+        doas "$@"
+    else
+        die "Python 3.10 or newer is required (run as root or install sudo)"
+    fi
+}
+
+install_python() {
+    printf 'Python 3.10+ not found. Installing python3...\n'
+    if command -v apt-get >/dev/null 2>&1; then
+        run_root apt-get update && run_root apt-get install -y python3
+    elif command -v dnf >/dev/null 2>&1; then
+        run_root dnf install -y python3
+    elif command -v yum >/dev/null 2>&1; then
+        run_root yum install -y python3
+    elif command -v pacman >/dev/null 2>&1; then
+        run_root pacman -Sy --noconfirm python
+    elif command -v zypper >/dev/null 2>&1; then
+        run_root zypper --non-interactive install python3
+    elif command -v apk >/dev/null 2>&1; then
+        run_root apk add --no-cache python3
+    elif command -v xbps-install >/dev/null 2>&1; then
+        run_root xbps-install -Sy python3
+    elif command -v brew >/dev/null 2>&1; then
+        brew install python3
+    else
+        die "Python 3.10 or newer is required (no supported package manager found)"
+    fi
+}
+
+if ! has_python; then
+    install_python
+    has_python || die "Python 3.10 or newer is required"
+fi
 
 ROOT=""
 BASE=$(basename "$0" 2>/dev/null || printf '%s' "$0")

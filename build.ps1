@@ -12,17 +12,64 @@ $Dest = if ($env:WLANTRON_PREFIX) { $env:WLANTRON_PREFIX } else { Join-Path $env
 
 function Test-Py([string[]]$Cmd) {
     $code = 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)'
-    if ($Cmd.Length -gt 1) { & $Cmd[0] @($Cmd[1..($Cmd.Length - 1)]) -c $code } else { & $Cmd[0] -c $code }
-    $LASTEXITCODE -eq 0
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    $global:LASTEXITCODE = 1
+    try {
+        if ($Cmd.Length -gt 1) { & $Cmd[0] @($Cmd[1..($Cmd.Length - 1)]) -c $code 2>$null | Out-Null } else { & $Cmd[0] -c $code 2>$null | Out-Null }
+        return ($LASTEXITCODE -eq 0)
+    } catch {
+        return $false
+    } finally {
+        $ErrorActionPreference = $prev
+    }
 }
 
 function Find-Python {
     if ((Get-Command py -ErrorAction SilentlyContinue) -and (Test-Py @('py', '-3'))) { return ,@('py', '-3') }
     foreach ($name in @('python', 'python3')) {
-        $cmd = Get-Command $name -ErrorAction SilentlyContinue
-        if ($cmd -and (Test-Py @($cmd.Source))) { return ,@($cmd.Source) }
+        foreach ($cmd in @(Get-Command $name -All -ErrorAction SilentlyContinue)) {
+            if ($cmd -and $cmd.Source -and (Test-Py @($cmd.Source))) { return ,@($cmd.Source) }
+        }
     }
-    throw 'Python 3.10+ was not found. Install it from https://www.python.org/downloads/ and tick the py launcher.'
+    $pyRoot = Join-Path $env:LOCALAPPDATA 'Programs\Python'
+    if ([IO.Directory]::Exists($pyRoot)) {
+        $dirs = [IO.Directory]::GetDirectories($pyRoot, 'Python3*')
+        if ($dirs.Length -gt 0) {
+            foreach ($dir in ($dirs | Sort-Object -Descending)) {
+                $cand = Join-Path $dir 'python.exe'
+                if ([IO.File]::Exists($cand) -and (Test-Py @($cand))) { return ,@($cand) }
+            }
+        }
+    }
+    return $null
+}
+
+function Install-Python {
+    if (-not (Get-Command curl.exe -ErrorAction SilentlyContinue)) {
+        throw 'Python 3.10+ was not found and curl.exe is missing.'
+    }
+    $pyVer = '3.12.10'
+    $arch = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } elseif ($env:PROCESSOR_ARCHITECTURE) { $env:PROCESSOR_ARCHITECTURE } else { 'AMD64' }
+    $suffix = switch ($arch) { 'ARM64' { '-arm64' } 'x86' { '' } default { '-amd64' } }
+    $url = "https://www.python.org/ftp/python/$pyVer/python-$pyVer$suffix.exe"
+    $tmp = Join-Path $env:TEMP ("wlantron-py-" + [guid]::NewGuid().ToString('n'))
+    [IO.Directory]::CreateDirectory($tmp) | Out-Null
+    try {
+        $exe = Join-Path $tmp "python-$pyVer$suffix.exe"
+        Write-Host "Python 3.10+ not found. Downloading Python $pyVer..."
+        & curl.exe -fsSL -o $exe $url
+        if ($LASTEXITCODE -ne 0) { throw "Failed to download Python $pyVer." }
+        Write-Host "Installing Python $pyVer..."
+        $proc = Start-Process -FilePath $exe -ArgumentList '/quiet InstallAllUsers=0 InstallLauncherAllUsers=0 PrependPath=1 Include_test=0 Include_doc=0 Include_tcltk=0' -Wait -PassThru
+        if ($proc.ExitCode -ne 0 -and $proc.ExitCode -ne 3010) { throw "Python installer failed ($($proc.ExitCode))." }
+    } finally {
+        if ([IO.Directory]::Exists($tmp)) {
+            try { [IO.Directory]::Delete($tmp, $true) } catch { Write-Warning $_.Exception.Message }
+        }
+    }
+    $parts = @([Environment]::GetEnvironmentVariable('Path', 'Machine'), [Environment]::GetEnvironmentVariable('Path', 'User')) | Where-Object { $_ }
+    $env:Path = $parts -join ';'
 }
 
 function Invoke-Py([string[]]$Cmd, [string[]]$PyArgs) {
@@ -41,6 +88,13 @@ function Copy-Tree([string]$Source, [string]$DestDir) {
 }
 
 $py = Find-Python
+if (-not $py) {
+    Install-Python
+    $py = Find-Python
+}
+if (-not $py) {
+    throw 'Python 3.10+ was not found after installation. Open a new terminal and re-run.'
+}
 $here = $PSScriptRoot
 $marker = 'wlantron\__main__.py'
 if ($here -and [IO.File]::Exists((Join-Path $here $marker))) {
