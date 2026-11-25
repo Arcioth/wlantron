@@ -1,5 +1,9 @@
 package com.arcioth.wlantron
 
+import java.io.File
+import java.net.SocketTimeoutException
+import java.net.URI
+import javax.xml.parsers.DocumentBuilderFactory
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -115,6 +119,244 @@ class PortalTest {
         assertFalse(posted.ok)
     }
 
+
+    // --- Credentials go only to a FortiGate auth page -------------------------------------
+
+    @Test
+    fun routerLoginGetsNoPassword() {
+        val sent = mutableListOf<String>()
+        val http = HttpCall { _, url, _, body, _ ->
+            if (body != null) sent += url
+            ok(200, ROUTER_LOGIN)
+        }
+        val posted = Portal.submit(http, "http://192.168.1.1/login.html", null, "cadet", "secret-test") {}
+        assertFalse(posted.ok)
+        assertTrue(sent.isEmpty())
+        assertTrue(posted.message, "192.168.1.1" in posted.message)
+        assertTrue(posted.message, "Your password was not sent." in posted.message)
+    }
+
+    @Test
+    fun mozillaPageGetsNoPost() {
+        val sent = mutableListOf<String>()
+        val http = HttpCall { _, url, _, body, _ ->
+            if (body != null) sent += url
+            ok(200, """<html><form action="/search" method="get"><input name="q"></form></html>""")
+        }
+        val posted = Portal.submit(http, "https://support.mozilla.org/kb/captive-portal", null, "cadet", "secret-test") {}
+        assertFalse(posted.ok)
+        assertTrue(sent.isEmpty())
+    }
+
+    @Test
+    fun crossOriginActionGetsNoPassword() {
+        val sent = mutableListOf<String>()
+        val http = HttpCall { _, url, _, body, _ ->
+            if (body != null) sent += url
+            ok(200, "")
+        }
+        val form = LOGIN.replace("""action="/"""", """action="http://203.0.113.9/x"""")
+        val posted = Portal.submit(http, "http://10.0.0.1/fgtauth?abc", form.toByteArray(), "cadet", "secret-test") {}
+        assertFalse(posted.ok)
+        assertTrue(sent.isEmpty())
+    }
+
+    // --- One credential POST per tap, success only after a POST ----------------------------
+
+    @Test
+    fun secondPasswordFormMeansRejected() {
+        val posts = mutableListOf<String>()
+        val http = HttpCall { method, _, _, body, _ ->
+            if (method == "POST") {
+                posts += body!!.toString(Charsets.UTF_8)
+                ok(302, headers = mapOf("location" to "http://10.0.0.1/fgtauth?beef"))
+            } else {
+                ok(200, LOGIN)
+            }
+        }
+        val posted = Portal.submit(http, "http://10.0.0.1/fgtauth?abc", LOGIN.toByteArray(), "cadet", "secret-test") {}
+        assertEquals(1, posts.count { "password=" in it })
+        assertFalse(posted.ok)
+        assertTrue(posted.message, "asked for the password again" in posted.message)
+    }
+
+    @Test
+    fun endlessRedirectIsNotSuccess() {
+        var hops = 0
+        val http = HttpCall { method, _, _, _, _ ->
+            if (method == "POST") {
+                ok(200, "")
+            } else {
+                hops += 1
+                ok(302, headers = mapOf("location" to "http://10.0.0.1/fgtauth?a$hops"))
+            }
+        }
+        val posted = Portal.submit(http, "http://10.0.0.1/fgtauth?a0", null, "cadet", "secret-test") {}
+        assertFalse(posted.ok)
+    }
+
+    // --- Gateway hint: fgtauth only, tried last --------------------------------------------
+
+    @Test
+    fun gatewayRedirectToRouterLoginIsNotPortal() {
+        val http = HttpCall { _, url, _, _, _ ->
+            if (url.startsWith("http://192.168.1.1/")) {
+                ok(302, headers = mapOf("location" to "http://192.168.1.1/login.html"))
+            } else {
+                throw DnsFailed("DNS failed for ${URI(url).host}")
+            }
+        }
+        val state = Portal.probe(http, listOf("http://192.168.1.1/"))
+        assertFalse(state.toString(), state is Probe.Portal)
+    }
+
+    @Test
+    fun onlineWinsOverGatewayRedirect() {
+        val http = HttpCall { _, url, _, _, _ ->
+            when {
+                url.startsWith("http://10.3.248.1/") -> ok(302, headers = mapOf("location" to "https://10.3.248.1/admin"))
+                "example.com" in url -> ok(200, "<html><body>Example Domain</body></html>")
+                else -> ok(204)
+            }
+        }
+        assertTrue(Portal.probe(http, listOf("http://10.3.248.1/")) is Probe.Online)
+    }
+
+    // --- A test site that answers normally is not a portal ---------------------------------
+
+    @Test
+    fun firefoxRefreshIsNotAPortal() {
+        val http = HttpCall { _, url, _, _, _ ->
+            when {
+                "example.com" in url -> throw NoAnswer("failed to connect to example.com/93.184.215.14 (port 80) after 4000ms")
+                "canonical.html" in url -> ok(200, FIREFOX_CANONICAL)
+                "hotspot-detect" in url -> ok(200, "<HTML><HEAD><TITLE>Success</TITLE></HEAD><BODY>Success</BODY></HTML>")
+                else -> ok(204)
+            }
+        }
+        val state = Portal.probe(http)
+        assertTrue(state.toString(), state is Probe.Down)
+        assertEquals(DownKind.REACHABLE, (state as Probe.Down).kind)
+    }
+
+    // --- Typed failures and a plain diagnosis ----------------------------------------------
+
+    @Test
+    fun silentNetworkIsExplained() {
+        val tried = mutableListOf<String>()
+        val http = HttpCall { _, url, _, _, _ ->
+            tried += url
+            throw NoAnswer("failed to connect to ${URI(url).host} (port 80) after 4000ms")
+        }
+        val state = Portal.probe(http, listOf("http://192.168.137.1/"))
+        assertTrue(state.toString(), state is Probe.Down)
+        val down = state as Probe.Down
+        assertEquals(DownKind.SILENT, down.kind)
+        val text = Portal.explain(down, AndroidCheck.NONE, signingIn = true).joinToString("\n")
+        assertTrue(text, "no web server answered" in text)
+        assertTrue(text, "Your password was not sent." in text)
+        assertTrue(text, "campus list" in text)
+        for (url in tried) assertTrue("$url missing from: $text", url.substringBefore('?') in text)
+        val check = Portal.explain(down, AndroidCheck.NONE, signingIn = false).joinToString("\n")
+        assertFalse(check, "password" in check)
+    }
+
+    @Test
+    fun dnsFailureDoesNotHideSilence() {
+        val http = HttpCall { _, url, _, _, _ ->
+            if ("example.com" in url) throw DnsFailed("DNS timed out for example.com")
+            throw NoAnswer("failed to connect to ${URI(url).host} (port 80) after 4000ms")
+        }
+        val state = Portal.probe(http)
+        assertEquals(DownKind.SILENT, (state as Probe.Down).kind)
+    }
+
+    @Test
+    fun readTimeoutIsNotSilence() {
+        val http = HttpCall { _, _, _, _, _ -> throw SocketTimeoutException("Read timed out") }
+        val state = Portal.probe(http)
+        assertTrue(state is Probe.Down)
+        assertFalse(DownKind.SILENT == (state as Probe.Down).kind)
+    }
+
+    @Test
+    fun unrecognizedAnswersAreNotTimeouts() {
+        val http = HttpCall { _, _, _, _, _ -> ok(200, "hello") }
+        val state = Portal.probe(http)
+        assertTrue(state is Probe.Down)
+        assertEquals(DownKind.UNRECOGNIZED, (state as Probe.Down).kind)
+        val text = Portal.explain(state, AndroidCheck.UNKNOWN, signingIn = false).joinToString("\n")
+        assertFalse(text, "timed out" in text)
+    }
+
+    @Test
+    fun explainUsesAndroidVerdict() {
+        val down = Probe.Down(
+            DownKind.SILENT,
+            listOf(Attempt("http://example.com/", AttemptKind.NO_ANSWER, "failed to connect", hint = false)),
+        )
+        val text = Portal.explain(down, AndroidCheck.SIGN_IN, signingIn = true).joinToString("\n")
+        assertTrue(text, "Android found a sign-in page" in text)
+        assertFalse(text, "campus list" in text)
+        assertEquals("Android's own check: no internet, and no sign-in page.", Portal.androidLine(AndroidCheck.NONE))
+        assertEquals(null, Portal.androidLine(AndroidCheck.UNKNOWN))
+    }
+
+    // --- No hang on a silent network -------------------------------------------------------
+
+    @Test
+    fun silentNetworkStopsAfterTwoHosts() {
+        val tried = mutableListOf<String>()
+        val http = HttpCall { _, url, _, _, _ ->
+            tried += url
+            throw NoAnswer("failed to connect to ${URI(url).host} (port 80) after 4000ms")
+        }
+        Portal.probe(http, listOf("http://192.168.137.1/"))
+        assertEquals(tried.toString(), 2, tried.size)
+        assertFalse(tried.any { "192.168.137.1" in it })
+    }
+
+    @Test
+    fun reprobeLoopReportsProgress() {
+        val lines = mutableListOf<String>()
+        var posted = false
+        val http = HttpCall { method, url, _, _, _ ->
+            when {
+                method == "POST" -> {
+                    posted = true
+                    ok(200, "ok")
+                }
+                posted -> throw NoAnswer("failed to connect to ${URI(url).host} (port 80) after 4000ms")
+                "example.com" in url -> ok(303, headers = mapOf("location" to "https://10.0.0.1:1003/fgtauth?abc"))
+                "fgtauth" in url -> ok(200, LOGIN)
+                else -> throw NoAnswer("failed to connect")
+            }
+        }
+        val outcome = Portal.signIn(http, "cadet", "secret-test", { lines += it }, pause = {})
+        assertTrue(outcome is Outcome.Failed)
+        for (n in 1..5) assertTrue(lines.toString(), lines.any { "($n of 5)" in it })
+    }
+
+    // --- Turkish locale: no "LOG İN" -------------------------------------------------------
+
+    @Test
+    fun buttonsAreNotAllCaps() {
+        val layout = listOf("src/main/res/layout/activity_main.xml", "app/src/main/res/layout/activity_main.xml")
+            .map(::File).first { it.isFile }
+        val doc = DocumentBuilderFactory.newInstance().apply { isNamespaceAware = true }
+            .newDocumentBuilder().parse(layout)
+        val buttons = doc.getElementsByTagName("Button")
+        assertTrue(buttons.length >= 3)
+        for (i in 0 until buttons.length) {
+            val node = buttons.item(i) as org.w3c.dom.Element
+            val id = node.getAttributeNS(ANDROID_NS, "id")
+            assertEquals("$id textAllCaps", "false", node.getAttributeNS(ANDROID_NS, "textAllCaps"))
+        }
+    }
+
+    private fun ok(status: Int, body: String = "", headers: Map<String, String> = emptyMap()) =
+        HttpResult(status, headers, emptyList(), body.toByteArray())
+
     private companion object {
         const val LOGIN = """<html><form action="/" method="post">
             <input type="hidden" name="magic" value="tok">
@@ -124,5 +366,13 @@ class PortalTest {
         const val DISCLAIMER = """<html>Firewall Disclaimer<form method="post" action="/">
             <input type="hidden" name="magic" value="abc">
             </form></html>"""
+        const val ROUTER_LOGIN = """<html><form action="/cgi-bin/login" method="post">
+            <input type="text" name="username"><input type="password" name="password">
+            </form></html>"""
+
+        /** Firefox's captivedetect.canonicalContent, what detectportal.firefox.com/canonical.html serves. */
+        const val FIREFOX_CANONICAL =
+            """<meta http-equiv="refresh" content="0;url=https://support.mozilla.org/kb/captive-portal"/>"""
+        const val ANDROID_NS = "http://schemas.android.com/apk/res/android"
     }
 }

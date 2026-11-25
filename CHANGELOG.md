@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.4 — 2026-11-25
+
+- Android explains a Wi-Fi that drops every connection. The 0.2.2 report from a tablet showed two raw "failed to connect … after 3000ms/4000ms" lines: it had an address and DNS, but neither the gateway nor any public site answered, so no login page ever appeared and no password was sent. The app now says that in plain words, lists the likely causes (the device's Wi-Fi MAC is not on the campus list, often because Android 10+ uses a random MAC per network; a phone or laptop hotspot instead of HHO_WiFi; the network closed right now), says where to read and change the MAC, and lists every URL it tried. It also logs Android's own verdict on the Wi-Fi (internet, sign-in page, or neither). This does not make a device the network drops log in.
+- A silent network fails in about 8 s instead of about 20 s: the probe stops after two public hosts give no answer at all. After a login POST, the re-check prints "Checking internet access (n of 5)."
+- The password is only sent to a FortiGate auth page (an `/fgtauth?<hex>` page or a form with a `magic` token), posted to that page's own origin, and only once per tap. Before, any redirect from the gateway or a test site counted as the portal, so a router or FortiGate admin login on the gateway could have received it, and a second login form got a second POST. A portal that only redirects is no longer reported as signed in.
+- The gateway is tried last and only counts if it names an `/fgtauth?` page. Firefox's normal `canonical.html` answer (a refresh to support.mozilla.org) is no longer mistaken for a portal.
+- Android 7 to 10 no longer crash the login thread: the API 30 `LinkProperties.getDhcpServerAddress` call is gone.
+- The Log in button no longer reads "LOG İN" on a Turkish phone. Buttons keep their own casing.
+
 ## 0.2.3 — 2026-11-03
 
 - Android no longer treats the Firefox, Apple, or Google captive-portal URLs as proof of internet. Those names are often allowed before login, so 0.2.2 could say "signed in" while normal sites still failed. A sign-in now counts only if `example.com` loads from the Wi-Fi address. Android is then asked to recheck the network.

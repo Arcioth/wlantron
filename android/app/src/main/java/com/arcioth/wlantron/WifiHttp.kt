@@ -25,10 +25,10 @@ import javax.net.ssl.X509TrustManager
 /**
  * HTTP pinned to the phone's Wi-Fi network.
  *
- * [Network.openConnection] asks the public DNS name first and often ignores
- * the timeout, so login sat on "Looking for Wi-Fi" and Check reported
- * detectportal.firefox.com. Sockets are bound with [Network.bindSocket],
- * and the Wi-Fi gateway is probed before any public name.
+ * Sockets are bound with [Network.bindSocket] and names resolve through
+ * [Network.getAllByName], so mobile data or a VPN can stay the default route.
+ * A connect that gets no answer at all throws [NoAnswer]; a failed lookup
+ * throws [DnsFailed]. [Portal] tells the student what that means.
  *
  * FortiGate answers the portal with a certificate the phone does not trust.
  * The desktop program turns verification off for the same reason.
@@ -59,7 +59,12 @@ class WifiHttp(
         try {
             network.bindSocket(plain)
             plain.soTimeout = timeoutMs
-            plain.connect(InetSocketAddress(address, port), timeoutMs)
+            try {
+                plain.connect(InetSocketAddress(address, port), timeoutMs)
+            } catch (exc: SocketTimeoutException) {
+                // No SYN-ACK, no reset, no ICMP: the network dropped the connection silently.
+                throw NoAnswer(exc.message ?: "No answer from $host", exc)
+            }
             val localIp = (plain.localAddress as? Inet4Address)?.hostAddress
             if (!localIp.isNullOrEmpty()) sourceAddress = localIp
             if (wifiIps.isNotEmpty() && !localIp.isNullOrEmpty() && localIp !in wifiIps) {
@@ -106,10 +111,10 @@ class WifiHttp(
             }
             return wait.get(timeoutMs.toLong(), TimeUnit.MILLISECONDS)
         } catch (exc: TimeoutException) {
-            throw java.io.IOException("DNS timed out for $host")
+            throw DnsFailed("DNS timed out for $host", exc)
         } catch (exc: Exception) {
             val cause = exc.cause ?: exc
-            throw java.io.IOException(cause.message ?: "DNS failed for $host")
+            throw DnsFailed(cause.message ?: "DNS failed for $host", cause)
         } finally {
             pool.shutdownNow()
         }
@@ -141,7 +146,10 @@ class WifiHttp(
             }
         }
 
-        /** Gateway addresses. The portal answers here without a public DNS lookup. */
+        /**
+         * Wi-Fi gateway URLs. Tried last, and they count only when they name a FortiGate
+         * /fgtauth? page (see [Portal.probe]).
+         */
         fun hints(context: Context, network: Network): List<String> {
             val manager = context.getSystemService(ConnectivityManager::class.java) ?: return emptyList()
             val links = manager.getLinkProperties(network) ?: return emptyList()
@@ -152,8 +160,18 @@ class WifiHttp(
                     gateway.hostAddress?.let { ips += it }
                 }
             }
-            links.dhcpServerAddress?.hostAddress?.let { if (IPV4.matches(it)) ips += it }
             return ips.map { "http://$it/" }
+        }
+
+        /** Android's own captive-portal check of this network (API 23+). It can lag behind. */
+        fun androidCheck(context: Context, network: Network): AndroidCheck {
+            val manager = context.getSystemService(ConnectivityManager::class.java) ?: return AndroidCheck.UNKNOWN
+            val caps = manager.getNetworkCapabilities(network) ?: return AndroidCheck.UNKNOWN
+            return when {
+                caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_CAPTIVE_PORTAL) -> AndroidCheck.SIGN_IN
+                caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) -> AndroidCheck.INTERNET
+                else -> AndroidCheck.NONE
+            }
         }
 
         fun addresses(context: Context, network: Network): Set<String> {

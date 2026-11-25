@@ -92,6 +92,8 @@ adb install -r android/app/build/outputs/apk/debug/app-debug.apk
 
 Or copy the APK onto the phone and allow install from that file manager. The password stays in the app's private storage. `Clear saved` deletes it.
 
+If the app says no web server answered, the Wi-Fi gave the phone an address but dropped every connection, so the login page never appeared and the password was not sent. Open the Wi-Fi network's details in Settings: the MAC address shown there must be the one on the campus list. Android 10 and later use a random MAC per network unless Privacy is set to the device MAC.
+
 `wifi-login --clear-saved` deletes the file. Nothing in this repo stores a password.
 
 On Windows, joining Wi-Fi or resetting Ethernet can ask for an administrator. A login on an adapter that already has an address does not.

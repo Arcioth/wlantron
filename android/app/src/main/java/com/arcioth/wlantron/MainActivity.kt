@@ -60,9 +60,13 @@ class MainActivity : AppCompatActivity() {
                 return@execute
             }
             val hints = WifiHttp.hints(this, network)
+            val check = WifiHttp.androidCheck(this, network)
             val cm = getSystemService(ConnectivityManager::class.java)
             cm.bindProcessToNetwork(network)
-            ui { log(if (hints.isEmpty()) "Wi-Fi is up." else "Wi-Fi is up. Gateway ${hints.first()}.") }
+            ui {
+                log(if (hints.isEmpty()) "Wi-Fi is up." else "Wi-Fi is up. Gateway ${hints.first()}.")
+                Portal.androidLine(check)?.let(::log)
+            }
             val http = WifiHttp(network, WifiHttp.addresses(this, network))
             try {
                 if (!signIn) {
@@ -71,13 +75,13 @@ class MainActivity : AppCompatActivity() {
                         when (state) {
                             is Probe.Online -> noteOnline(cm, network, "This Wi-Fi can open a normal site.")
                             is Probe.Portal -> log("Captive portal is up. Tap Log in.")
-                            is Probe.Down -> log(state.detail)
+                            is Probe.Down -> log(Portal.explain(state, check, signingIn = false).joinToString("\n"))
                         }
                         setBusy(false)
                     }
                     return@execute
                 }
-                val outcome = Portal.signIn(http, username, password, ::uiLog, hints)
+                val outcome = Portal.signIn(http, username, password, ::uiLog, hints, check)
                 ui {
                     when (outcome) {
                         Outcome.AlreadyOnline -> noteOnline(cm, network, "Already signed in on Wi-Fi.")
