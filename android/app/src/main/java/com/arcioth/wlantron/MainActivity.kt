@@ -70,7 +70,7 @@ class MainActivity : AppCompatActivity() {
             val http = WifiHttp(network, WifiHttp.addresses(this, network))
             try {
                 if (!signIn) {
-                    val state = Portal.probe(http, hints)
+                    val state = Portal.probe(http, hints, check)
                     ui {
                         when (state) {
                             is Probe.Online -> noteOnline(cm, network, "This Wi-Fi can open a normal site.")

@@ -42,7 +42,7 @@ object Portal {
         pause: (Long) -> Unit = { Thread.sleep(it) },
     ): Outcome {
         log("Checking the portal.")
-        when (val first = probe(http, hints)) {
+        when (val first = probe(http, hints, check)) {
             is Probe.Online -> return Outcome.AlreadyOnline
             is Probe.Down -> return Outcome.Failed(explain(first, check, signingIn = true).joinToString("\n"))
             is Probe.Portal -> {
@@ -53,7 +53,7 @@ object Portal {
         }
         for (round in 1..5) {
             log("Checking internet access ($round of 5).")
-            if (probe(http, hints) is Probe.Online) return Outcome.SignedIn
+            if (probe(http, hints, check) is Probe.Online) return Outcome.SignedIn
             if (round < 5) pause(800)
         }
         return Outcome.Failed("The portal did not open internet access. Try again.")
@@ -63,13 +63,19 @@ object Portal {
      * example.com first (only it proves internet), then the portal finders, then the Wi-Fi
      * gateway. The gateway counts only if it names a FortiGate /fgtauth?<hex> page.
      */
-    fun probe(http: HttpCall, hints: List<String> = emptyList()): Probe {
+    fun probe(
+        http: HttpCall,
+        hints: List<String> = emptyList(),
+        check: AndroidCheck = AndroidCheck.UNKNOWN,
+    ): Probe {
+        // Android saw a sign-in page: keep going, the host that finds it may be one we would skip.
+        val stopAfter = if (check == AndroidCheck.SIGN_IN) Int.MAX_VALUE else SILENT_HOSTS_TO_STOP
         val attempts = mutableListOf<Attempt>()
         proveInternet(http, attempts)?.let { return it }
         var reachable = false
         val nonce = System.currentTimeMillis().toString()
         for (finder in portalFinders) {
-            if (silentHosts(attempts) >= SILENT_HOSTS_TO_STOP) break
+            if (silentHosts(attempts) >= stopAfter) break
             val url = "${finder.url}?nocache=$nonce"
             val result = fetch(http, url, attempts) ?: continue
             if (finder.normal(result)) {
@@ -78,7 +84,7 @@ object Portal {
             }
             classifyHit(url, result)?.let { return it }
         }
-        if (silentHosts(attempts) < SILENT_HOSTS_TO_STOP) {
+        if (silentHosts(attempts) < stopAfter) {
             for (hint in hints) {
                 val result = fetch(http, hint, attempts, hint = true) ?: continue
                 fortiRedirect(hint, result)?.let { return Probe.Portal(it, null) }
@@ -213,16 +219,13 @@ object Portal {
                 lines += "Wi-Fi is connected and names resolve, but no web server answered, not even a login page."
                 if (signingIn) lines += "Your password was not sent."
                 when (check) {
-                    AndroidCheck.SIGN_IN -> {
-                        lines += "Android found a sign-in page on this Wi-Fi, but wlantron got no answer from it."
-                        lines += "Sign in from Android's own Wi-Fi notification, and check that no setting blocks wlantron on Wi-Fi."
-                    }
-                    AndroidCheck.INTERNET -> {
-                        lines += "Android says this Wi-Fi has internet, but wlantron got no answer. " +
-                            "Check that no setting blocks wlantron on Wi-Fi."
-                    }
-                    else -> lines += SILENT_STEPS
+                    AndroidCheck.SIGN_IN ->
+                        lines += "Android's last check saw a sign-in page on this Wi-Fi. A setting may also block wlantron on Wi-Fi."
+                    AndroidCheck.INTERNET ->
+                        lines += "Android's last check said this Wi-Fi had internet. A setting may also block wlantron on Wi-Fi."
+                    else -> Unit
                 }
+                lines += SILENT_STEPS
             }
             DownKind.REACHABLE -> {
                 lines += "The test sites answered, but example.com did not load and no login page appeared. " +

@@ -296,10 +296,26 @@ class PortalTest {
             listOf(Attempt("http://example.com/", AttemptKind.NO_ANSWER, "failed to connect", hint = false)),
         )
         val text = Portal.explain(down, AndroidCheck.SIGN_IN, signingIn = true).joinToString("\n")
-        assertTrue(text, "Android found a sign-in page" in text)
-        assertFalse(text, "campus list" in text)
+        assertTrue(text, "Android's last check saw a sign-in page" in text)
+        assertTrue(text, "campus list" in text)
+        assertFalse(text, "got no answer from it" in text)
         assertEquals("Android's own check: no internet, and no sign-in page.", Portal.androidLine(AndroidCheck.NONE))
         assertEquals(null, Portal.androidLine(AndroidCheck.UNKNOWN))
+    }
+
+    @Test
+    fun androidSignInVerdictKeepsProbing() {
+        val tried = mutableListOf<String>()
+        val http = HttpCall { _, url, _, _, _ ->
+            tried += url
+            if ("generate_204" in url) {
+                ok(302, headers = mapOf("location" to "http://10.0.0.1:1000/fgtauth?aa"))
+            } else {
+                throw NoAnswer("failed to connect to ${URI(url).host} (port 80) after 4000ms")
+            }
+        }
+        val state = Portal.probe(http, emptyList(), AndroidCheck.SIGN_IN)
+        assertTrue(tried.toString(), state is Probe.Portal)
     }
 
     // --- No hang on a silent network -------------------------------------------------------

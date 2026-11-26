@@ -57,6 +57,8 @@ Git checkout: `git pull --ff-only origin main`. Curl copy: replace the package f
 - Android: `readHttp` edge cases (bare `\n\n` header end, 1xx replies, a reset inside the body). No effect on the 0.2.4 report.
 - Android: run `lintDebug` with NewApi as a gate (`abortOnError=false` hid `getDhcpServerAddress`), and a signing config kept outside the repo so every build installs over the last.
 - Android: rotation (overlapping runs, `freezesText` on the log).
+- Android: a DNS lookup that times out does not count toward the two-silent-hosts stop, so a network that drops DNS too takes about 20 s and gets the "rejoin" text without the MAC causes. A reset or ICMP "unreachable" on connect lands in the vague "could not reach" text. Android's verdict is read once, before the probe.
+- Android: a disclaimer form whose hidden `answer` defaults to a decline value is posted unchanged (the code only adds `answer=1` when the field is missing). Unverified against HHO's page; same in `portal.py`.
 - Desktop parity: `portal.py` still POSTs credentials to any form with credential fields and can POST up to 3 times; port the fgtauth/magic, same-origin and once-per-run rules. It also keeps only the first two errors and says "all probes timed out" when nothing errored.
 
 Signed-off-by: Grok 4.7 (xAI) & Arcioth
